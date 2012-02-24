@@ -97,7 +97,7 @@ app.get('/test', function(req,res){
                       , dropboxAuth.accessToken
                       , dropboxAuth.accessTokenSecret
                       , 'I am a test.', "text/plain"
-                      , function(err, data, res) {
+                      , function(err, data, rsp) {
                           if (err) {
                             console.error(err);
                             res.send('oauth client error',500);
