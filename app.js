@@ -1,7 +1,7 @@
 var express = require('express'),
     qs = require('querystring'),
     url = require('url'),
-    rk = require('./support/runkeeper/lib/runkeeper'),
+    rk = require('node-runkeeper/lib/runkeeper'),
     RedisStore = require('connect-redis')(express);
 
 var runKeeper = new rk.HealthGraph({

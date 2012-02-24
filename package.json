@@ -17,7 +17,8 @@
     "express": "~2.5.8",
     "ejs": "~0.6.1",
     "request": "~2.9.100",
-    "connect-redis": "~1.2.0"
+    "connect-redis": "~1.2.0",
+    "node-runkeeper": "git://github.com/marksoper/node-runkeeper.git"
   },
   "devDependencies": {}
 }
