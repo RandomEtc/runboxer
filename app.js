@@ -58,10 +58,20 @@ app.get('/', function(req,res){
     locals: {
       title: 'RunBoxer',
       hasRunKeeper: req.session.hasRunKeeper,
-      hasDropbox: req.session.hasDropbox
+      runKeeper: req.session.auth && req.session.auth.runKeeper,
+      hasDropbox: req.session.hasDropbox,
+      dropbox: req.session.auth && req.session.auth.dropbox,
     }
   });
 });
+
+app.get('/auth/runkeeper/logout', function(req, res) {
+  if (req.session.hasRunKeeper) {
+    delete req.session.hasRunKeeper;
+    delete req.session.auth.runKeeper;
+  }
+  res.redirect('/');
+})
 
 app.get('/auth/runkeeper', function(req,res){
   if (req.session.hasRunKeeper) {

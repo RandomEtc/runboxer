@@ -3,7 +3,7 @@
 <% if (!hasRunKeeper) { %>
   <p><a href="/auth/runkeeper">Add Runkeeper</a></p>
 <% } else { %>
-  <p>Got Runkeeper</p>
+  <p>Got Runkeeper user <%=runKeeper.user.name%> from <%=runKeeper.user.location%>.</p>
 <% } %>
 <% if (!hasDropbox) { %>
   <p><a href="/auth/dropbox">Add Dropbox</a></p>
