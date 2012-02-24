@@ -1,0 +1,15 @@
+Go to http://runkeeper.com/partner/applications to set up a RunKeeper application.
+
+Go to https://www.dropbox.com/developers to set up a Dropbox application.
+
+Add the following keys to a .env file:
+
+DROPBOX_KEY=???
+DROPBOX_SECRET=???
+RUNKEEPER_KEY=???
+RUNKEEPER_SECRET=???
+RUNKEEPER_AUTH_URL=???
+RUNKEEPER_TOKEN_URL=???
+RUNKEEPER_REMOVE_URL=???
+SESSION_SECRET=???
+
