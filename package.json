@@ -8,7 +8,7 @@
   },
   "main": "app.js",
   "engines": {
-    "node": "~v0.4.11"
+    "node": ">=0.4.7"
   },
   "dependencies": {
     "restler": "~0.2.1",
