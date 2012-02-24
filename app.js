@@ -4,7 +4,6 @@ var express = require('express'),
     url = require('url'),
     rk = require('node-runkeeper/lib/runkeeper'),
     OAuth = require('oauth').OAuth,
-    DropboxClient = require('dropbox').DropboxClient,
     RedisStore = require('connect-redis')(express);
 
 var API_URI = 'https://api.dropbox.com/1'
