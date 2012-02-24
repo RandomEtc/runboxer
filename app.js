@@ -1,4 +1,5 @@
 var express = require('express'),
+    everyauth = require('everyauth'),
     qs = require('querystring'),
     url = require('url'),
     rk = require('node-runkeeper/lib/runkeeper'),
@@ -21,6 +22,18 @@ runKeeper.getAuthRedirect = function() {
   return this.auth_url + '?' + qs.stringify(query);
 }
 
+//everyauth.debug = true;
+
+everyauth.dropbox
+  .myHostname(process.env.SERVER_URL)
+  .consumerKey(process.env.DROPBOX_KEY)
+  .consumerSecret(process.env.DROPBOX_SECRET)
+  .findOrCreateUser( function (sess, accessToken, accessSecret, user) {
+    // session based only, for now
+    return user;
+  })
+  .redirectPath('/');
+
 var app = express.createServer();
 
 // Configuration
@@ -39,6 +52,7 @@ app.configure(function(){
   app.use(express.methodOverride());
   app.use(express.cookieParser());
   app.use(express.session({ store: new RedisStore(redisOptions), secret: process.env.SESSION_SECRET }));
+  app.use(everyauth.middleware());
   app.use(app.router);
   app.use(express.static(__dirname + '/public'));
 });
@@ -54,39 +68,39 @@ app.configure('production', function(){
 // Routes
 
 app.get('/', function(req,res){
+  var runKeeper = req.session.auth ? req.session.auth.runKeeper : null,
+      dropbox = req.session.auth ? req.session.auth.dropbox : null;
   res.render('index', {
     locals: {
       title: 'RunBoxer',
-      hasRunKeeper: req.session.hasRunKeeper,
-      runKeeper: req.session.auth && req.session.auth.runKeeper,
-      hasDropbox: req.session.hasDropbox,
-      dropbox: req.session.auth && req.session.auth.dropbox,
+      hasRunKeeper: runKeeper != null,
+      runKeeper: runKeeper,
+      hasDropbox: dropbox != null,
+      dropbox: dropbox,
     }
   });
 });
 
-app.get('/auth/runkeeper/logout', function(req, res) {
-  if (req.session.hasRunKeeper) {
-    delete req.session.hasRunKeeper;
-    delete req.session.auth.runKeeper;
+app.get('/auth/:service/logout', function(req, res) {
+  if (req.params.service in { 'runkeeper':1, 'dropbox': 1}) {
+    if (req.session.auth[req.params.service]) {
+      delete req.session.auth[req.params.service];
+    }
   }
   res.redirect('/');
 })
 
 app.get('/auth/runkeeper', function(req,res){
-  if (req.session.hasRunKeeper) {
+  if (req.session.auth && req.session.auth.runKeeper) {
     res.redirect('/');
   } else if (req.query.code) {
     runKeeper.getNewToken(req.query.code, function(access_token) {
-      console.log(access_token);
-      req.session.hasRunKeeper = true;
       req.session.auth = req.session.auth || {};
       req.session.auth.runKeeper = { access_token: access_token };
       // Get user profile information
       runKeeper.access_token = access_token;
       runKeeper.profile(function(data) {
         req.session.auth.runKeeper.user = JSON.parse(data);
-        console.log(req.session.auth.runKeeper.user);
         res.redirect('/')
       });
       runKeeper.access_token = null;
