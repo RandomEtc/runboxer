@@ -3,7 +3,17 @@ var express = require('express'),
     qs = require('querystring'),
     url = require('url'),
     rk = require('node-runkeeper/lib/runkeeper'),
+    OAuth = require('oauth').OAuth,
+    DropboxClient = require('dropbox').DropboxClient,
     RedisStore = require('connect-redis')(express);
+
+var API_URI = 'https://api.dropbox.com/1'
+  , CONTENT_API_URI = 'https://api-content.dropbox.com/1';
+
+var dropbox = new OAuth(API_URI + '/oauth/request_token'
+                    , API_URI + '/oauth/access_token'
+                   , process.env.DROPBOX_KEY, process.env.DROPBOX_SECRET
+                           , '1.0', null, 'HMAC-SHA1');
 
 var runkeeper = new rk.HealthGraph({
   client_id : process.env.RUNKEEPER_KEY,
@@ -68,18 +78,38 @@ app.configure('production', function(){
 // Routes
 
 app.get('/', function(req,res){
-  var runkeeper = req.session.auth ? req.session.auth.runkeeper : null,
-      dropbox = req.session.auth ? req.session.auth.dropbox : null;
+  var runkeeperAuth = req.session.auth ? req.session.auth.runkeeper : null,
+      dropboxAuth = req.session.auth ? req.session.auth.dropbox : null;
   res.render('index', {
     locals: {
       title: 'RunBoxer',
-      hasRunKeeper: runkeeper != null,
-      runkeeper: runkeeper,
-      hasDropbox: dropbox != null,
-      dropbox: dropbox,
+      hasRunKeeper: runkeeperAuth != null,
+      runkeeper: runkeeperAuth,
+      hasDropbox: dropboxAuth != null,
+      dropbox: dropboxAuth,
     }
   });
 });
+
+app.get('/test', function(req,res){
+  var dropboxAuth = req.session.auth && req.session.auth.dropbox;
+  if (dropboxAuth) {
+    dropbox.put(CONTENT_API_URI + '/files_put/sandbox/' + 'test.txt'
+                      , dropboxAuth.accessToken
+                      , dropboxAuth.accessTokenSecret
+                      , 'I am a test.', "text/plain"
+                      , function(err, data, res) {
+                          if (err) {
+                            console.error(err);
+                            res.send('oauth client error',500);
+                          } else {
+                            res.send(JSON.parse(data));
+                          }
+                      });
+  } else {
+    res.send("Dropbox needs authorizing first.", 403)
+  }
+})
 
 app.get('/auth/:service/logout', function(req, res) {
   var service = req.params.service;
