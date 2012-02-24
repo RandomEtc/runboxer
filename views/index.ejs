@@ -1,2 +1,12 @@
 <h1><%= title %></h1>
 <p>Welcome to <%= title %></p>
+<% if (!hasRunKeeper) { %>
+  <p><a href="/auth/runkeeper">Add Runkeeper</a></p>
+<% } else { %>
+  <p>Got Runkeeper</p>
+<% } %>
+<% if (!hasDropbox) { %>
+  <p><a href="/auth/dropbox">Add Dropbox</a></p>
+<% } else { %>
+  <p>Got Dropbox</p>
+<% } %>
