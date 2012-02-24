@@ -1,9 +1,9 @@
 <h1><%= title %></h1>
 <p>Welcome to <%= title %></p>
 <% if (!hasRunKeeper) { %>
-  <p><a href="/auth/runkeeper">Add Runkeeper</a></p>
+  <p><a href="/auth/runkeeper">Add RunKeeper</a></p>
 <% } else { %>
-  <p>Got Runkeeper user <%=runKeeper.user.name%> from <%=runKeeper.user.location%>. <a href="/auth/runkeeper/logout">Remove RunKeeper</a>.</p>
+  <p>Got RunKeeper user <%=runkeeper.user.name%> from <%=runkeeper.user.location%>. <a href="/auth/runkeeper/logout">Remove RunKeeper</a>.</p>
 <% } %>
 <% if (!hasDropbox) { %>
   <p><a href="/auth/dropbox">Add Dropbox</a></p>

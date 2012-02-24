@@ -5,7 +5,7 @@ var express = require('express'),
     rk = require('node-runkeeper/lib/runkeeper'),
     RedisStore = require('connect-redis')(express);
 
-var runKeeper = new rk.HealthGraph({
+var runkeeper = new rk.HealthGraph({
   client_id : process.env.RUNKEEPER_KEY,
   client_secret : process.env.RUNKEEPER_SECRET,
   auth_url : process.env.RUNKEEPER_AUTH_URL,
@@ -13,7 +13,7 @@ var runKeeper = new rk.HealthGraph({
   redirect_uri : process.env.SERVER_URL + '/auth/runkeeper'
 });
 
-runKeeper.getAuthRedirect = function() {
+runkeeper.getAuthRedirect = function() {
   var query = {
     client_id: this.client_id,
     response_type: 'code',
@@ -68,13 +68,13 @@ app.configure('production', function(){
 // Routes
 
 app.get('/', function(req,res){
-  var runKeeper = req.session.auth ? req.session.auth.runKeeper : null,
+  var runkeeper = req.session.auth ? req.session.auth.runkeeper : null,
       dropbox = req.session.auth ? req.session.auth.dropbox : null;
   res.render('index', {
     locals: {
       title: 'RunBoxer',
-      hasRunKeeper: runKeeper != null,
-      runKeeper: runKeeper,
+      hasRunKeeper: runkeeper != null,
+      runkeeper: runkeeper,
       hasDropbox: dropbox != null,
       dropbox: dropbox,
     }
@@ -82,31 +82,37 @@ app.get('/', function(req,res){
 });
 
 app.get('/auth/:service/logout', function(req, res) {
-  if (req.params.service in { 'runkeeper':1, 'dropbox': 1}) {
-    if (req.session.auth[req.params.service]) {
-      delete req.session.auth[req.params.service];
+  var service = req.params.service;
+  console.log('attempting to remove %s', service)
+  if (service in { 'runkeeper':1, 'dropbox': 1}) {
+    if (req.session.auth && req.session.auth[service]) {
+      delete req.session.auth[service];
+    } else {
+      console.error('%s service not logged in', service)
     }
+  } else {
+    console.error('%s not a valid service for logout', service)
   }
   res.redirect('/');
 })
 
 app.get('/auth/runkeeper', function(req,res){
-  if (req.session.auth && req.session.auth.runKeeper) {
+  if (req.session.auth && req.session.auth.runkeeper) {
     res.redirect('/');
   } else if (req.query.code) {
-    runKeeper.getNewToken(req.query.code, function(access_token) {
+    runkeeper.getNewToken(req.query.code, function(access_token) {
       req.session.auth = req.session.auth || {};
-      req.session.auth.runKeeper = { access_token: access_token };
+      req.session.auth.runkeeper = { access_token: access_token };
       // Get user profile information
-      runKeeper.access_token = access_token;
-      runKeeper.profile(function(data) {
-        req.session.auth.runKeeper.user = JSON.parse(data);
+      runkeeper.access_token = access_token;
+      runkeeper.profile(function(data) {
+        req.session.auth.runkeeper.user = JSON.parse(data);
         res.redirect('/')
       });
-      runKeeper.access_token = null;
+      runkeeper.access_token = null;
     })
   } else {
-    res.redirect(runKeeper.getAuthRedirect());
+    res.redirect(runkeeper.getAuthRedirect());
   }
 })
 
