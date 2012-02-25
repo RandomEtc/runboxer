@@ -90,24 +90,55 @@ app.get('/', function(req,res){
   });
 });
 
-app.get('/test', function(req,res){
+function requireRunKeeper(req,res,next) {
+  var runkeeperAuth = req.session.auth && req.session.auth.runkeeper;
+  if (runkeeperAuth) {
+    req.runkeeper = runkeeperAuth;
+    next();
+  } else {
+    res.send("RunKeeper needs authorizing first.", 403);
+  }
+}
+
+app.get('/test/runkeeper', requireRunKeeper, function(req,res){
+  runkeeper.access_token = req.runkeeper.access_token;
+  runkeeper.profile(function(data) {
+    res.send(data);
+  });
+  runkeeper.access_token = null;
+});
+
+app.get('/api/runkeeper/fitness-activities', requireRunKeeper, function(req, res) {
+  runkeeper.access_token = req.runkeeper.access_token;
+  runkeeper.fitnessActivityFeed(function(data) {
+    res.send(data);
+  });
+  runkeeper.access_token = null;
+})
+
+function requireDropbox(req,res,next) {
   var dropboxAuth = req.session.auth && req.session.auth.dropbox;
   if (dropboxAuth) {
-    dropbox.put(CONTENT_API_URI + '/files_put/sandbox/' + 'test.txt'
-                      , dropboxAuth.accessToken
-                      , dropboxAuth.accessTokenSecret
-                      , 'I am a test.', "text/plain"
-                      , function(err, data, rsp) {
-                          if (err) {
-                            console.error(err);
-                            res.send('oauth client error',500);
-                          } else {
-                            res.send(JSON.parse(data));
-                          }
-                      });
+    req.dropbox = dropboxAuth;
+    next();
   } else {
-    res.send("Dropbox needs authorizing first.", 403)
+    res.send("Dropbox needs authorizing first.", 403);
   }
+}
+
+app.get('/test/dropbox', requireDropbox, function(req,res){
+  dropbox.put(CONTENT_API_URI + '/files_put/sandbox/' + 'test.txt'
+                    , req.dropbox.accessToken
+                    , req.dropbox.accessTokenSecret
+                    , 'I am a test.', "text/plain"
+                    , function(err, data, rsp) {
+                        if (err) {
+                          console.error(err);
+                          res.send('oauth client error',500);
+                        } else {
+                          res.send(JSON.parse(data));
+                        }
+                    });
 })
 
 app.get('/auth/:service/logout', function(req, res) {
