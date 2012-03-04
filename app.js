@@ -6,108 +6,25 @@ var qs = require('querystring'),
     express = require('express'),
     everyauth = require('everyauth'),
     request = require('request'),
-    RedisStore = require('connect-redis')(express);
+    RedisStore = require('connect-redis')(express),
+    Dropbox = require('./lib/dropbox'),
+    RunKeeper = require('./lib/runkeeper');
 
-
-var dropbox = {
-    consumer_key: process.env.DROPBOX_KEY,
-    consumer_secret: process.env.DROPBOX_SECRET,
-    api_uri: 'https://api.dropbox.com/1',
-    content_api_uri: 'https://api-content.dropbox.com/1',
+var dropbox = new Dropbox({
+    hostName: process.env.SERVER_URL,
+    consumerKey: process.env.DROPBOX_KEY,
+    consumerSecret: process.env.DROPBOX_SECRET,
     sandbox: true
-};
+});
 
-dropbox.filesPut = function(path, contents, media_type, auth, callback) {
-    var url = this.content_api_uri + '/files_put/' + (this.sandbox ? 'sandbox' : 'dropbox') + path,
-        oauth = {
-            consumer_key: this.consumer_key,
-            consumer_secret: this.consumer_secret,
-            token: auth.accessToken,
-            token_secret: auth.accessTokenSecret
-        };
-    request.put({ url:url, oauth:oauth, json:true }, function (err, res, data) {
-        if (err) {
-            return callback(err);
-        } else {
-            return callback(null, data);
-        }
-    });
-};
-
-var runkeeper = {
+var runkeeper = new RunKeeper({
     client_id: process.env.RUNKEEPER_KEY,
     client_secret: process.env.RUNKEEPER_SECRET,
     auth_url: process.env.RUNKEEPER_AUTH_URL,
     access_token_url: process.env.RUNKEEPER_TOKEN_URL,
     redirect_uri: process.env.SERVER_URL + '/auth/runkeeper',
     api_domain: 'api.runkeeper.com'
-};
-
-runkeeper.request = function(request_details, callback) {
-    request(request_details, function(error, response, body) {
-        if (error) {
-            return callback(error);
-        }
-        try {
-            var data = JSON.parse(body);
-            callback(null, data);
-        } catch(err) {
-            callback(err);
-        }
-    });
-};
-
-runkeeper.get = function(uri, media_type, access_token, callback) {
-    this.request({
-        method: 'GET',
-        headers: {
-            'Accept': media_type, // TODO: how to know?
-            'Authorization': 'Bearer ' + access_token
-        },
-        uri: "https://" + this.api_domain + uri
-    }, callback);
-};
-
-runkeeper.getAccessToken = function(authorization_code, callback) {
-
-    var request_params = {
-        grant_type: "authorization_code",
-        code: authorization_code,
-        client_id: this.client_id,
-        client_secret: this.client_secret,
-        redirect_uri: this.redirect_uri
-    };
-
-    var request_details = {
-        method: "POST",
-        headers: { 'content-type' : 'application/x-www-form-urlencoded' },
-        uri: this.access_token_url,
-        body: qs.stringify(request_params)
-    };
-
-    this.request(request_details, callback);
-};
-
-runkeeper.getAuthRedirect = function() {
-    var query = {
-        client_id: this.client_id,
-        response_type: 'code',
-        redirect_uri: this.redirect_uri
-    };
-    return this.auth_url + '?' + qs.stringify(query);
-};
-
-//everyauth.console.log = true;
-
-everyauth.dropbox
-    .myHostname(process.env.SERVER_URL)
-    .consumerKey(process.env.DROPBOX_KEY)
-    .consumerSecret(process.env.DROPBOX_SECRET)
-    .findOrCreateUser( function (sess, accessToken, accessSecret, user) {
-        // session based only, for now
-        return user;
-    })
-    .redirectPath('/');
+});
 
 var app = express.createServer();
 
@@ -157,54 +74,29 @@ app.get('/', function(req,res){
     });
 });
 
-function requireRunKeeper(req,res,next) {
-    var runkeeperAuth = req.session.auth && req.session.auth.runkeeper;
-    if (runkeeperAuth) {
-        req.runkeeper = runkeeperAuth;
-        next();
-    } else {
-        res.send("RunKeeper needs authorizing first.", 403);
-    }
+// protect API
+function requireAuth(name) {
+    return function(req,res,next) {
+        console.log('checking for %s auth', name)
+        var serviceAuth = req.session.auth && req.session.auth[name];
+        if (serviceAuth) {
+            req[name] = serviceAuth;
+            next();
+        } else {
+            res.send(name + " needs authorizing first.", 403);
+        }
+    };
 }
 
-app.get('/api/runkeeper/profile', requireRunKeeper, function(req, res, next){
-  var uri = req.runkeeper.user.profile,
-      accept = 'application/vnd.com.runkeeper.Profile+json',
-      token = req.runkeeper.access_token;
-  runkeeper.get(uri, accept, token, function(err,data) {
-      if (err) {
-          return next(err);
-      }
-      res.send(data);
-  });
-});
+app.all('/api/runkeeper/*', requireAuth('runkeeper'));
+app.all('/api/dropbox/*', requireAuth('dropbox'));
 
-app.get('/api/runkeeper/user', requireRunKeeper, function(req, res, next){
-  var uri = '/user',
-      accept = 'application/vnd.com.runkeeper.User+json',
-      token = req.runkeeper.access_token;
-  runkeeper.get(uri, accept, token, function(err,data) {
-      if (err) {
-          return next(err);
-      }
-      res.send(data);
-  });
-});
+app.get('/api/runkeeper/profile', runkeeper.profileRoute());
+app.get('/api/runkeeper/user', runkeeper.userRoute());
+app.get('/api/runkeeper/fitness-activities', runkeeper.fitnessActivityFeedRoute());
+app.get('/auth/runkeeper', runkeeper.authRoute());
 
-app.get('/api/runkeeper/fitness-activities', requireRunKeeper, function(req, res, next) {
-  var uri = req.runkeeper.user.fitness_activities,
-      accept = 'application/vnd.com.runkeeper.FitnessActivityFeed+json',
-      token = req.runkeeper.access_token;
-  runkeeper.get(uri, accept, token, function(err,data) {
-      if (err) {
-          return next(err);
-      }
-      console.log(data);
-      res.send(data);
-  });
-});
-
-app.get(/^\/api\/runkeeper(.*)/, requireRunKeeper, function(req, res, next) {
+app.get(/^\/api\/runkeeper(.*)/, function(req, res, next) {
   var uri = req.params[0],
       accept = req.query.media_type || 'application/json',
       token = req.runkeeper.access_token;
@@ -221,17 +113,7 @@ app.get(/^\/api\/runkeeper(.*)/, requireRunKeeper, function(req, res, next) {
   }
 });
 
-function requireDropbox(req,res,next) {
-    var dropboxAuth = req.session.auth && req.session.auth.dropbox;
-    if (dropboxAuth) {
-        req.dropbox = dropboxAuth;
-        next();
-    } else {
-        res.send("Dropbox needs authorizing first.", 403);
-    }
-}
-
-app.get('/api/dropbox/put-test', requireDropbox, function(req,res){
+app.post('/api/dropbox/put-test', function(req,res){
     dropbox.filesPut('/test.txt', "I am a test file.", "text/plain", req.dropbox, function(err, data) {
         if (err) {
             console.log(err);
@@ -240,59 +122,6 @@ app.get('/api/dropbox/put-test', requireDropbox, function(req,res){
             res.send(data);
         }
     });
-});
-
-app.get('/auth/:service/logout', function(req, res) {
-    var service = req.params.service;
-    console.log('attempting to remove %s', service);
-    if (service in { 'runkeeper':1, 'dropbox': 1}) {
-        if (req.session.auth && req.session.auth[service]) {
-            delete req.session.auth[service];
-        } else {
-            console.log('%s service not logged in', service);
-        }
-    } else {
-        console.log('%s not a valid service for logout', service);
-    }
-    res.redirect('/');
-});
-
-app.get('/auth/runkeeper', function(req,res,next){
-    if (req.session.auth && req.session.auth.runkeeper) {
-        res.redirect('/');
-    } else if (req.query.code) {
-        runkeeper.getAccessToken(req.query.code, function(err, data) {
-            if (err) {
-                return next(err);
-            }
-            console.log("got access_token %s", data);
-            req.session.auth = req.session.auth || {};
-            req.session.auth.runkeeper = data;
-            // Get user resource information:
-            var uri = '/user',
-                accept = 'application/vnd.com.runkeeper.User+json';
-            runkeeper.get(uri, accept, data.access_token, function(err, user) {
-                if (err) {
-                    delete req.session.auth.runkeeper;
-                    return next(err);
-                }
-                req.session.auth.runkeeper.user = user;
-                // get actual profile info
-                var uri = user.profile,
-                    accept = 'application/vnd.com.runkeeper.Profile+json';
-                runkeeper.get(uri, accept, data.access_token, function(err, profile) {
-                    if (err) {
-                        delete req.session.auth.runkeeper;
-                        return next(err);
-                    }
-                    req.session.auth.runkeeper.profile = profile;
-                    res.redirect('/');
-                });
-            });
-        });
-    } else {
-      res.redirect(runkeeper.getAuthRedirect());
-    }
 });
 
 app.listen(process.env.PORT, function() {
