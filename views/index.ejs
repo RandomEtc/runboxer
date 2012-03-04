@@ -3,10 +3,10 @@
 <% if (!hasRunKeeper) { %>
   <p><a href="/auth/runkeeper">Add RunKeeper</a></p>
 <% } else { %>
-  <p>Got RunKeeper user <%=runkeeper.user.name%> from <%=runkeeper.user.location%>. <a href="/auth/runkeeper/logout">Remove RunKeeper</a>.</p>
+  <p>Got RunKeeper user <%=runkeeper.profile.name%> from <%=runkeeper.profile.location%>. <a href="/api/runkeeper/profile">Test RunKeeper</a>. <a href="/auth/runkeeper/logout">Remove RunKeeper</a>.</p>
 <% } %>
 <% if (!hasDropbox) { %>
   <p><a href="/auth/dropbox">Add Dropbox</a></p>
 <% } else { %>
-  <p>Got Dropbox user <%=dropbox.user.display_name%> from <%=dropbox.user.country%>. <a href="/auth/dropbox/logout">Remove Dropbox</a>.</p>
+  <p>Got Dropbox user <%=dropbox.user.display_name%> from <%=dropbox.user.country%>. <a href="/api/dropbox/put-test">Test Dropbox</a>. <a href="/auth/dropbox/logout">Remove Dropbox</a>.</p>
 <% } %>
