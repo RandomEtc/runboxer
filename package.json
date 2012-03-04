@@ -18,8 +18,6 @@
     "ejs": "~0.6.1",
     "request": "~2.9.153",
     "connect-redis": "~1.2.0",
-    "node-runkeeper": "git://github.com/RandomEtc/node-runkeeper.git",
-    "oauth": "~0.9.5"
   },
   "devDependencies": {}
 }

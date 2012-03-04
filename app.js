@@ -5,20 +5,34 @@ var qs = require('querystring'),
     url = require('url'),
     express = require('express'),
     everyauth = require('everyauth'),
-    OAuth = require('oauth').OAuth,
     request = require('request'),
     RedisStore = require('connect-redis')(express);
 
-var API_URI = 'https://api.dropbox.com/1',
-    CONTENT_API_URI = 'https://api-content.dropbox.com/1';
 
-var dropbox = new OAuth(API_URI + '/oauth/request_token',
-                        API_URI + '/oauth/access_token',
-                        process.env.DROPBOX_KEY,
-                        process.env.DROPBOX_SECRET,
-                        '1.0',
-                        null,
-                        'HMAC-SHA1');
+var dropbox = {
+    consumer_key: process.env.DROPBOX_KEY,
+    consumer_secret: process.env.DROPBOX_SECRET,
+    api_uri: 'https://api.dropbox.com/1',
+    content_api_uri: 'https://api-content.dropbox.com/1',
+    sandbox: true
+};
+
+dropbox.filesPut = function(path, contents, media_type, auth, callback) {
+    var url = this.content_api_uri + '/files_put/' + (this.sandbox ? 'sandbox' : 'dropbox') + path,
+        oauth = {
+            consumer_key: this.consumer_key,
+            consumer_secret: this.consumer_secret,
+            token: auth.accessToken,
+            token_secret: auth.accessTokenSecret
+        };
+    request.put({ url:url, oauth:oauth, json:true }, function (err, res, data) {
+        if (err) {
+            return callback(err);
+        } else {
+            return callback(null, data);
+        }
+    });
+};
 
 var runkeeper = {
     client_id: process.env.RUNKEEPER_KEY,
@@ -218,19 +232,14 @@ function requireDropbox(req,res,next) {
 }
 
 app.get('/api/dropbox/put-test', requireDropbox, function(req,res){
-    dropbox.put(CONTENT_API_URI + '/files_put/sandbox/' + 'test.txt',
-        req.dropbox.accessToken,
-        req.dropbox.accessTokenSecret,
-        "I am a test file.",
-        "text/plain",
-        function(err, data, rsp) {
-            if (err) {
-                console.log(err);
-                res.send('oauth client error',500);
-            } else {
-                res.send(JSON.parse(data));
-            }
-        });
+    dropbox.filesPut('/test.txt', "I am a test file.", "text/plain", req.dropbox, function(err, data) {
+        if (err) {
+            console.log(err);
+            res.send('oauth client error',500);
+        } else {
+            res.send(data);
+        }
+    });
 });
 
 app.get('/auth/:service/logout', function(req, res) {
