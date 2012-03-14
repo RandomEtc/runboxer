@@ -124,49 +124,74 @@ var jobs = {};
 
 function processJob(id) {
     var job = jobs[id],
-        uri = job.runkeeper.user.fitness_activities,
-        accept = 'application/vnd.com.runkeeper.FitnessActivityFeed+json',
-        token = job.runkeeper.access_token;
-    runkeeper.get(uri, accept, token, function(err,feed) {
-        if (err || !feed) {
-            console.error('job %s failed to get activity feed', id);
-            // TODO: mark job as failed in queue?
-            console.error((err && err.stack) || 'Received empty feed - not sure why.');
-            delete jobs[id];
-        } else {
-            console.log('job %s got feed', id);
-            var q = queue(5);
-            feed.items.forEach(function(item) {
-                var uri = item.uri,
-                    accept = 'application/vnd.com.runkeeper.FitnessActivity+json';
-                q.defer(runkeeper.get.bind(runkeeper, uri, accept, token));
-            });
-            q.await(function(error, results) {
-                console.log('job %s got %d results', id, results.length);
-                if (err || !results) {
-                    console.error('job %s failed to get activity item', id);
-                    // TODO: mark job as failed in queue?
-                    console.error((err && err.stack) || 'Received empty results - not sure why.');
-                    delete jobs[id];
-                } else {
-                    var data = {
-                        name: 'Test Runboxer Export',
-                        description: 'Test Runboxer Description',
-                        items: results
-                    };
-                    dropbox.filesPut('/test.kml', template(data), "application/vnd.google-earth.kml+xml", job.dropbox, function(err, data) {
-                        if (err || !data) {
-                            console.error('Failed to put final KML into Dropbox');
-                            console.error((err && err.stack) || 'Received empty response from Dropbox - not sure why.');
-                        } else {
-                            console.log('job %s complete', id);
-                        }
-                        delete jobs[id];
-                    });
+        token = job.runkeeper.access_token,
+        feedQueue = queue(1);
+    function getNextFeed(uri){
+        return function(callback){
+            var accept = 'application/vnd.com.runkeeper.FitnessActivityFeed+json';
+            runkeeper.get(uri, accept, token, function(err,feed) {
+                if (feed && feed.next) {
+                    console.log('queueing next feed for job %s', id);
+                    feedQueue.defer(getNextFeed(feed.next));
                 }
+                callback(err,feed);
             });
-        }
-    });
+        };
+    }
+    console.log('queueing first feed for job %s', id);
+    feedQueue.defer(getNextFeed(job.runkeeper.user.fitness_activities))
+        .await(function(err,feeds){
+            if (err || !feeds || !feeds.length) {
+                console.error('job %s failed to get activity feeds', id);
+                // TODO: mark job as failed in queue?
+                console.error((err && err.stack) || 'Received empty feeds - not sure why.');
+                delete jobs[id];
+            } else {
+                if (!Array.isArray(feeds)) {
+                    feeds = [ feeds ];
+                }
+                console.log('job %s got feeds', id);
+                var q = queue(5),
+                    size = feeds[0].size,
+                    offset = 0;
+                feeds.forEach(function(feed){
+                    var adjust = offset;
+                    feed.items.forEach(function(item,i) {
+                        var uri = item.uri,
+                            accept = 'application/vnd.com.runkeeper.FitnessActivity+json';
+                        q.defer(function(callback){
+                            console.log('job %s fetching %d of %d items', id, adjust+i, size)
+                            runkeeper.get(uri, accept, token, callback);
+                        });
+                    });
+                    offset += feed.items.length;
+                });
+                q.await(function(error, results) {
+                    console.log('job %s got %d results', id, results.length);
+                    if (err || !results) {
+                        console.error('job %s failed to get activity item', id);
+                        // TODO: mark job as failed in queue?
+                        console.error((err && err.stack) || 'Received empty results - not sure why.');
+                        delete jobs[id];
+                    } else {
+                        var data = {
+                            name: 'Test Runboxer Export',
+                            description: 'Test Runboxer Description',
+                            items: results
+                        };
+                        dropbox.filesPut('/test.kml', template(data), "application/vnd.google-earth.kml+xml", job.dropbox, function(err, data) {
+                            if (err || !data) {
+                                console.error('Failed to put final KML into Dropbox');
+                                console.error((err && err.stack) || 'Received empty response from Dropbox - not sure why.');
+                            } else {
+                                console.log('job %s complete', id);
+                            }
+                            delete jobs[id];
+                        });
+                    }
+                });
+            }
+        });
 }
 
 app.post('/api/runboxer/job', requireAuth('runkeeper'), requireAuth('dropbox'), function(req, res, next) {
