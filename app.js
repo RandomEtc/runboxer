@@ -8,7 +8,6 @@ var qs = require('querystring'),
     queue = require('queue'),
     express = require('express'),
     everyauth = require('everyauth'),
-    request = require('request'),
     RedisStore = require('connect-redis')(express),
     Dropbox = require('./lib/dropbox'),
     RunKeeper = require('./lib/runkeeper');
@@ -99,26 +98,26 @@ app.all('/api/runkeeper/*', requireAuth('runkeeper'));
 app.all('/api/dropbox/*', requireAuth('dropbox'));
 
 app.get('/api/runkeeper/profile', runkeeper.profileRoute());
-app.get('/api/runkeeper/user', runkeeper.userRoute());
-app.get('/api/runkeeper/fitness-activities', runkeeper.fitnessActivityFeedRoute());
+// app.get('/api/runkeeper/user', runkeeper.userRoute());
+// app.get('/api/runkeeper/fitness-activities', runkeeper.fitnessActivityFeedRoute());
 app.get('/auth/runkeeper', runkeeper.authRoute());
 
-app.get(/^\/api\/runkeeper(\/.*)/, function(req, res, next) {
-  var uri = req.params[0],
-      accept = req.query.media_type || 'application/json',
-      token = req.runkeeper.access_token;
-  if (uri && uri.length) {
-      runkeeper.get(uri, accept, token, function(err,data) {
-          if (err) {
-              return next(err);
-          }
-          console.log(data);
-          res.send(data);
-      });
-  } else {
-      next();
-  }
-});
+// app.get(/^\/api\/runkeeper(\/.*)/, function(req, res, next) {
+//   var uri = req.params[0],
+//       accept = req.query.media_type || 'application/json',
+//       token = req.runkeeper.access_token;
+//   if (uri && uri.length) {
+//       runkeeper.get(uri, accept, token, function(err,data) {
+//           if (err) {
+//               return next(err);
+//           }
+//           console.log(data);
+//           res.send(data);
+//       });
+//   } else {
+//       next();
+//   }
+// });
 
 var jobs = {};
 
@@ -206,16 +205,16 @@ app.post('/api/runboxer/job', requireAuth('runkeeper'), requireAuth('dropbox'), 
     }
 });
 
-app.post('/api/dropbox/put-test', function(req,res){
-    dropbox.filesPut('/test.txt', "I am a test file.", "text/plain", req.dropbox, function(err, data) {
-        if (err) {
-            console.log(err);
-            res.send('oauth client error',500);
-        } else {
-            res.send(data);
-        }
-    });
-});
+// app.post('/api/dropbox/put-test', function(req,res){
+//     dropbox.filesPut('/test.txt', "I am a test file.", "text/plain", req.dropbox, function(err, data) {
+//         if (err) {
+//             console.log(err);
+//             res.send('oauth client error',500);
+//         } else {
+//             res.send(data);
+//         }
+//     });
+// });
 
 app.listen(process.env.PORT, function() {
     console.log("Express server listening on port %d in %s mode", app.address().port, app.settings.env);
