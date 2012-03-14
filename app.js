@@ -135,7 +135,7 @@ function processJob(id) {
             delete jobs[id];
         } else {
             console.log('job %s got feed', id);
-            var q = queue();
+            var q = queue(5);
             feed.items.forEach(function(item) {
                 var uri = item.uri,
                     accept = 'application/vnd.com.runkeeper.FitnessActivity+json';
