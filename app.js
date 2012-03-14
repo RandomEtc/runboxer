@@ -13,7 +13,7 @@ var qs = require('querystring'),
     Dropbox = require('./lib/dropbox'),
     RunKeeper = require('./lib/runkeeper');
 
-var template = ejs.compile(fs.readFileSync('views/kml.ejs', 'utf8'))
+var template = ejs.compile(fs.readFileSync('views/kml.ejs', 'utf8'));
 
 var dropbox = new Dropbox({
     hostName: process.env.SERVER_URL,
@@ -66,16 +66,17 @@ app.configure('production', function(){
 
 app.get('/', function(req,res){
     var runkeeperAuth = req.session.auth && req.session.auth.runkeeper,
-        dropboxAuth = req.session.auth && req.session.auth.dropbox;
-    //console.log(req.session);
-    console.log(runkeeperAuth, dropboxAuth);
+        dropboxAuth = req.session.auth && req.session.auth.dropbox,
+        hasAuth = (runkeeperAuth && dropboxAuth) ? true : false,
+        compoundId = hasAuth ? runkeeperAuth.user.userID + '-' + dropboxAuth.user.uid : null;
     res.render('index', {
         locals: {
             title: 'RunBoxer',
             hasRunKeeper: Boolean(runkeeperAuth),
             runkeeper: runkeeperAuth,
             hasDropbox: Boolean(dropboxAuth),
-            dropbox: dropboxAuth
+            dropbox: dropboxAuth,
+            jobQueued: compoundId && (compoundId in jobs)
         }
     });
 });
@@ -83,7 +84,7 @@ app.get('/', function(req,res){
 // protect API
 function requireAuth(name) {
     return function(req,res,next) {
-        console.log('checking for %s auth', name)
+        console.log('checking for %s auth', name);
         var serviceAuth = req.session.auth && req.session.auth[name];
         if (serviceAuth) {
             req[name] = serviceAuth;
@@ -119,14 +120,21 @@ app.get(/^\/api\/runkeeper(\/.*)/, function(req, res, next) {
   }
 });
 
-app.post('/api/runboxer/job', requireAuth('runkeeper'), requireAuth('dropbox'), function(req, res, next) {
-    var uri = req.runkeeper.user.fitness_activities,
+var jobs = {};
+
+function processJob(id) {
+    var job = jobs[id],
+        uri = job.runkeeper.user.fitness_activities,
         accept = 'application/vnd.com.runkeeper.FitnessActivityFeed+json',
-        token = req.runkeeper.access_token;
+        token = job.runkeeper.access_token;
     runkeeper.get(uri, accept, token, function(err,feed) {
         if (err || !feed) {
-            return next(err || 'Received empty feed - not sure why.');
+            console.error('job %s failed to get activity feed', id);
+            // TODO: mark job as failed in queue?
+            console.error((err && err.stack) || 'Received empty feed - not sure why.');
+            delete jobs[id];
         } else {
+            console.log('job %s got feed', id);
             var q = queue();
             feed.items.forEach(function(item) {
                 var uri = item.uri,
@@ -134,30 +142,44 @@ app.post('/api/runboxer/job', requireAuth('runkeeper'), requireAuth('dropbox'), 
                 q.defer(runkeeper.get.bind(runkeeper, uri, accept, token));
             });
             q.await(function(error, results) {
+                console.log('job %s got %d results', id, results.length);
                 if (err || !results) {
-                    return next(err || 'Received empty results - not sure why.');
+                    console.error('job %s failed to get activity item', id);
+                    // TODO: mark job as failed in queue?
+                    console.error((err && err.stack) || 'Received empty results - not sure why.');
+                    delete jobs[id];
                 } else {
                     var data = {
                         name: 'Test Runboxer Export',
                         description: 'Test Runboxer Description',
-                        items: []
-                    }
-                    results.forEach(function(item) {
-                        data.items.push(item);
-                    })
-                    dropbox.filesPut('/test.kml', template(data), "application/vnd.google-earth.kml+xml", req.dropbox, function(err, data) {
+                        items: results
+                    };
+                    dropbox.filesPut('/test.kml', template(data), "application/vnd.google-earth.kml+xml", job.dropbox, function(err, data) {
                         if (err || !data) {
-                            console.log(err);
-                            res.send('oauth client error',500);
+                            console.error('Failed to put final KML into Dropbox');
+                            console.error((err && err.stack) || 'Received empty response from Dropbox - not sure why.');
                         } else {
-                            res.send(data); // TODO: render a success page
+                            console.log('job %s complete', id);
                         }
+                        delete jobs[id];
                     });
                 }
             });
         }
     });
-})
+}
+
+app.post('/api/runboxer/job', requireAuth('runkeeper'), requireAuth('dropbox'), function(req, res, next) {
+    var compoundId = req.runkeeper.user.userID + '-' + req.dropbox.user.uid;
+    if (compoundId in jobs) {
+        res.send(418);
+    } else {
+        jobs[compoundId] = { runkeeper: req.runkeeper, dropbox: req.dropbox, items: [] };
+        res.redirect('/');
+        // TODO: proper queue (kue?)
+        processJob(compoundId);
+    }
+});
 
 app.post('/api/dropbox/put-test', function(req,res){
     dropbox.filesPut('/test.txt', "I am a test file.", "text/plain", req.dropbox, function(err, data) {

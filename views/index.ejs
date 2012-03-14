@@ -1,7 +1,13 @@
 <h1><%= title %></h1>
 <p>Welcome to <%= title %></p>
 <% if (hasDropbox && hasRunKeeper) { %>
-  <p>Looks like you're logged in. Press sync to, er, sync: <form action="/api/runboxer/job" method="POST"><button type="submit">Sync</button></form></p>
+  <p>Looks like you're logged in.
+  <% if (jobQueued) { %>
+    We're still processing your job. Keep an eye on your Dropbox.
+  <% } else { %>
+    Press sync to, er, sync: <form action="/api/runboxer/job" method="POST"><button type="submit">Sync</button></form>
+  <% } %>
+  </p>
 <% } %>
 <hr>
 <% if (!hasRunKeeper) { %>
