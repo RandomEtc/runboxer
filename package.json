@@ -18,6 +18,7 @@
     "ejs": "~0.6.1",
     "request": "~2.9.153",
     "connect-redis": "~1.2.0",
+    "queue": "https://github.com/mbostock/queue/tarball/master"
   },
   "devDependencies": {}
 }

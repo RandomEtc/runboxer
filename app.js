@@ -2,13 +2,18 @@
 "use strict";
 
 var qs = require('querystring'),
+    fs = require('fs'),
     url = require('url'),
+    ejs = require('ejs'),
+    queue = require('queue'),
     express = require('express'),
     everyauth = require('everyauth'),
     request = require('request'),
     RedisStore = require('connect-redis')(express),
     Dropbox = require('./lib/dropbox'),
     RunKeeper = require('./lib/runkeeper');
+
+var template = ejs.compile(fs.readFileSync('views/kml.ejs', 'utf8'))
 
 var dropbox = new Dropbox({
     hostName: process.env.SERVER_URL,
@@ -62,7 +67,8 @@ app.configure('production', function(){
 app.get('/', function(req,res){
     var runkeeperAuth = req.session.auth && req.session.auth.runkeeper,
         dropboxAuth = req.session.auth && req.session.auth.dropbox;
-    console.log(req.session);
+    //console.log(req.session);
+    console.log(runkeeperAuth, dropboxAuth);
     res.render('index', {
         locals: {
             title: 'RunBoxer',
@@ -96,11 +102,11 @@ app.get('/api/runkeeper/user', runkeeper.userRoute());
 app.get('/api/runkeeper/fitness-activities', runkeeper.fitnessActivityFeedRoute());
 app.get('/auth/runkeeper', runkeeper.authRoute());
 
-app.get(/^\/api\/runkeeper(.*)/, function(req, res, next) {
+app.get(/^\/api\/runkeeper(\/.*)/, function(req, res, next) {
   var uri = req.params[0],
       accept = req.query.media_type || 'application/json',
       token = req.runkeeper.access_token;
-  if (uri && uri.length && uri[0] == '/') {
+  if (uri && uri.length) {
       runkeeper.get(uri, accept, token, function(err,data) {
           if (err) {
               return next(err);
@@ -112,6 +118,46 @@ app.get(/^\/api\/runkeeper(.*)/, function(req, res, next) {
       next();
   }
 });
+
+app.post('/api/runboxer/job', requireAuth('runkeeper'), requireAuth('dropbox'), function(req, res, next) {
+    var uri = req.runkeeper.user.fitness_activities,
+        accept = 'application/vnd.com.runkeeper.FitnessActivityFeed+json',
+        token = req.runkeeper.access_token;
+    runkeeper.get(uri, accept, token, function(err,feed) {
+        if (err || !feed) {
+            return next(err || 'Received empty feed - not sure why.');
+        } else {
+            var q = queue();
+            feed.items.forEach(function(item) {
+                var uri = item.uri,
+                    accept = 'application/vnd.com.runkeeper.FitnessActivity+json';
+                q.defer(runkeeper.get.bind(runkeeper, uri, accept, token));
+            });
+            q.await(function(error, results) {
+                if (err || !results) {
+                    return next(err || 'Received empty results - not sure why.');
+                } else {
+                    var data = {
+                        name: 'Test Runboxer Export',
+                        description: 'Test Runboxer Description',
+                        items: []
+                    }
+                    results.forEach(function(item) {
+                        data.items.push(item);
+                    })
+                    dropbox.filesPut('/test.kml', template(data), "application/vnd.google-earth.kml+xml", req.dropbox, function(err, data) {
+                        if (err || !data) {
+                            console.log(err);
+                            res.send('oauth client error',500);
+                        } else {
+                            res.send(data); // TODO: render a success page
+                        }
+                    });
+                }
+            });
+        }
+    });
+})
 
 app.post('/api/dropbox/put-test', function(req,res){
     dropbox.filesPut('/test.txt', "I am a test file.", "text/plain", req.dropbox, function(err, data) {

@@ -1,5 +1,9 @@
 <h1><%= title %></h1>
 <p>Welcome to <%= title %></p>
+<% if (hasDropbox && hasRunKeeper) { %>
+  <p>Looks like you're logged in. Press sync to, er, sync: <form action="/api/runboxer/job" method="POST"><button type="submit">Sync</button></form></p>
+<% } %>
+<hr>
 <% if (!hasRunKeeper) { %>
   <p><a href="/auth/runkeeper">Add RunKeeper</a></p>
 <% } else { %>
@@ -17,6 +21,7 @@
   </style>
   <p>Got Dropbox user <%=dropbox.user.display_name%> from <%=dropbox.user.country%>. <form action="/api/dropbox/put-test" method="POST"><button type="submit">Test Dropbox</button></form></p>
 <% } %>
+<hr>
 <% if (hasDropbox || hasRunKeeper) { %>
   <p><a href="/logout">Log Out</a>
 <% } %>
